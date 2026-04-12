@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <!-- Background -->
+  <rect width="192" height="192" fill="#FF8C00" rx="45"/>
+  
+  <!-- Dashboard grid pattern -->
+  <g fill="#FFFFFF" opacity="0.9">
+    <!-- Top-left card -->
+    <rect x="20" y="20" width="60" height="60" rx="8"/>
+    
+    <!-- Top-right card -->
+    <rect x="112" y="20" width="60" height="60" rx="8"/>
+    
+    <!-- Bottom-left card -->
+    <rect x="20" y="112" width="60" height="60" rx="8"/>
+    
+    <!-- Bottom-right card -->
+    <rect x="112" y="112" width="60" height="60" rx="8"/>
+  </g>
+  
+  <!-- Chart bars inside cards -->
+  <g fill="#FF8C00" opacity="0.7">
+    <!-- Bars in top-left -->
+    <rect x="32" y="55" width="6" height="15" rx="2"/>
+    <rect x="42" y="45" width="6" height="25" rx="2"/>
+    <rect x="52" y="50" width="6" height="20" rx="2"/>
+    
+    <!-- Bars in top-right -->
+    <rect x="124" y="55" width="6" height="15" rx="2"/>
+    <rect x="134" y="45" width="6" height="25" rx="2"/>
+    <rect x="144" y="50" width="6" height="20" rx="2"/>
+    
+    <!-- Bars in bottom-left -->
+    <rect x="32" y="147" width="6" height="15" rx="2"/>
+    <rect x="42" y="137" width="6" height="25" rx="2"/>
+    <rect x="52" y="142" width="6" height="20" rx="2"/>
+  </g>
+</svg>
