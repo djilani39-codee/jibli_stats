@@ -20,11 +20,16 @@ workflows:
       - name: Build iOS IPA
         script: |
           flutter build ios --release --build-number=$BUILD_NUMBER
+      - name: Publish to TestFlight
+        script: |
+          # هذا السطر سيقوم بالرفع يدوياً متجاوزاً أخطاء الـ YAML
+          app-store-connect publish \
+            --issuer-id $APP_STORE_CONNECT_ISSUER_ID \
+            --key-id $APP_STORE_CONNECT_KEY_ID \
+            --private-key $APP_STORE_CONNECT_PRIVATE_KEY
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
-      app_store_connect:
-        auth: integration
       email:
         recipients:
           - djilanibenhacine5@gmail.com
