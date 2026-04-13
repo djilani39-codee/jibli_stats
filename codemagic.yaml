@@ -3,11 +3,9 @@ workflows:
     name: Jibli Stats iOS Build
     max_build_duration: 60
     instance_type: mac_mini_m2
-    integrations:
-      app_store_connect: apple_auth # هذا هو السطر الذي كان ينقصك لربط المتكاملات
     environment:
       groups:
-        - apple_auth 
+        - apple_auth # تأكد أن هذا هو اسم المجموعة التي أضفت فيها المتغيرات في الموقع
       flutter: stable
       xcode: latest
     scripts:
@@ -17,6 +15,7 @@ workflows:
       - name: Set up code signing
         script: |
           keychain initialize
+          # جلب ملفات التوقيع باستخدام المتغيرات
           app-store-connect fetch-signing-files "com.jibli_stats" --publish-type app-store --create
           export_signing_files
       - name: Build iOS IPA
@@ -26,7 +25,7 @@ workflows:
       - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
-        auth: integration
+        auth: manual # عدنا لـ manual ولكن سنحذف الحقول التي تسبب الخطأ
       email:
         recipients:
           - djilanibenhacine5@gmail.com
