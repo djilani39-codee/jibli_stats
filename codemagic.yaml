@@ -6,8 +6,6 @@ workflows:
     environment:
       groups:
         - apple_auth 
-      vars:
-        XCODE_BUNDLE_ID: "com.jibli_stats" # تأكد من صحة المعرف هنا
       flutter: stable
       xcode: latest
     scripts:
@@ -17,20 +15,19 @@ workflows:
       - name: Set up code signing
         script: |
           keychain initialize
-          # جلب الشهادات والبروفايلات بدون تعقيدات إضافية
-          app-store-connect fetch-signing-files "$XCODE_BUNDLE_ID" \
+          # جلب ملفات التوقيع وتوليد شهادة جديدة إذا لم يتطابق المفتاح الخاص
+          app-store-connect fetch-signing-files "com.jibli_stats" \
             --type IOS_APP_STORE \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_ID" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            --create
+            --create \
+            --certificate-key "$APP_STORE_CONNECT_PRIVATE_KEY"
           keychain add-certificates
       - name: Build iOS IPA
         script: |
-          # بناء وتحميل الشهادات وتوقيع الـ IPA في خطوة واحدة ذكية
-          flutter build ios --release --build-number=$BUILD_NUMBER
-          # توليد ملف الـ IPA النهائي
-          codemagic-cli-tools build-ipa --project-path ios --bundle-id "$XCODE_BUNDLE_ID"
+          flutter build ios --release --no-codesign
+          codemagic-cli-tools build-ipa --project-path ios --bundle-id "com.jibli_stats"
       - name: Publish to TestFlight
         script: |
           app-store-connect publish \
