@@ -3,6 +3,8 @@ workflows:
     name: Jibli Stats iOS Build
     max_build_duration: 60
     instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: apple_auth # هذا هو السطر الذي كان ينقصك لربط المتكاملات
     environment:
       groups:
         - apple_auth 
@@ -15,7 +17,6 @@ workflows:
       - name: Set up code signing
         script: |
           keychain initialize
-          # تأكد أن المعرف أدناه هو نفسه الذي اخترته في موقع Apple
           app-store-connect fetch-signing-files "com.jibli_stats" --publish-type app-store --create
           export_signing_files
       - name: Build iOS IPA
@@ -25,7 +26,7 @@ workflows:
       - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
-        auth: integration  # هذا السطر وحده يكفي الآن
+        auth: integration
       email:
         recipients:
           - djilanibenhacine5@gmail.com
