@@ -5,7 +5,7 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       groups:
-        - apple_auth # تأكد أن هذا هو اسم المجموعة التي أضفت فيها المتغيرات في الموقع
+        - apple_auth 
       flutter: stable
       xcode: latest
     scripts:
@@ -15,7 +15,6 @@ workflows:
       - name: Set up code signing
         script: |
           keychain initialize
-          # جلب ملفات التوقيع باستخدام المتغيرات
           app-store-connect fetch-signing-files "com.jibli_stats" --publish-type app-store --create
           export_signing_files
       - name: Build iOS IPA
@@ -25,7 +24,11 @@ workflows:
       - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
-        auth: manual # عدنا لـ manual ولكن سنحذف الحقول التي تسبب الخطأ
+        auth: integration
+        # سنعيد إضافة المتغيرات هنا مع كلمة integration لإجبار النظام على قبولها
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        key_id: $APP_STORE_CONNECT_KEY_ID
+        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
       email:
         recipients:
           - djilanibenhacine5@gmail.com
