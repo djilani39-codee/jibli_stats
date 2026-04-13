@@ -15,15 +15,14 @@ workflows:
       - name: Set up code signing
         script: |
           keychain initialize
-          # حددنا الاسم يدوياً JibliStatsApp لتجنب خطأ المسافات 409
+          # سحب ملفات التوقيع وإنشاء شهادة جديدة
+          # ملاحظة: تم حذف الأوامر التي تسبب تعارضاً مع إصدار CLI الحالي
           app-store-connect fetch-signing-files "com.jibli_stats" \
             --type IOS_APP_STORE \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_ID" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            --bundle-id-name "JibliStatsApp" \
-            --create \
-            --certificate-key "$APP_STORE_CONNECT_PRIVATE_KEY"
+            --create
           keychain add-certificates
       - name: Build iOS IPA
         script: |
