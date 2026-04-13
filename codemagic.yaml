@@ -2,7 +2,7 @@ workflows:
   ios-workflow:
     name: Jibli Stats iOS Build
     max_build_duration: 60
-    instance_type: mac_mini_m2 # تم التحديث ليتوافق مع الماك الجديد الذي ظهر في البناء الناجح
+    instance_type: mac_mini_m2
     environment:
       groups:
         - apple_auth 
@@ -15,21 +15,17 @@ workflows:
       - name: Set up code signing
         script: |
           keychain initialize
-          # سيقوم بجلب ملفات التوقيع تلقائياً باستخدام المتغيرات التي أضفتها
+          # تأكد أن المعرف أدناه هو نفسه الذي اخترته في موقع Apple
           app-store-connect fetch-signing-files "com.jibli_stats" --publish-type app-store --create
           export_signing_files
       - name: Build iOS IPA
         script: |
-          # البناء مع التوقيع الآن ليقبل الرفع للمتجر
           flutter build ios --release --build-number=$BUILD_NUMBER
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
-        auth: integration  # قم بتغيير manual إلى integration
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        key_id: $APP_STORE_CONNECT_KEY_ID
-        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        auth: integration  # هذا السطر وحده يكفي الآن
       email:
         recipients:
           - djilanibenhacine5@gmail.com
