@@ -1,4 +1,14 @@
-scripts:
+workflows:
+  ios-workflow:
+    name: Jibli Stats iOS Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      groups:
+        - apple_auth 
+      flutter: stable
+      xcode: latest
+    scripts:
       - name: Get Flutter dependencies
         script: |
           flutter pub get
@@ -11,9 +21,7 @@ scripts:
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_ID" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            --certificate-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            --create \
-            --bundle-id-name "JibliStatsApp"
+            --create
           keychain add-certificates
       - name: Build iOS IPA
         script: |
@@ -25,3 +33,9 @@ scripts:
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_ID" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      email:
+        recipients:
+          - djilanibenhacine5@gmail.com
