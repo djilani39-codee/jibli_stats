@@ -15,12 +15,13 @@ workflows:
       - name: Set up code signing
         script: |
           keychain initialize
-          # جلب ملفات التوقيع فقط (بدون محاولة إنشاء معرفات جديدة)
           app-store-connect fetch-signing-files "com.jibli_stats" \
             --type IOS_APP_STORE \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_ID" \
-            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
+            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            --certificate-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            --create
           keychain add-certificates
       - name: Build iOS IPA
         script: |
