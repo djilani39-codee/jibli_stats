@@ -15,23 +15,26 @@ workflows:
       - name: Set up code signing
         script: |
           keychain initialize
-          # تمرير المتغيرات يدوياً للأمر لضمان عدم ضياعها
+          # جلب ملفات التوقيع مع توليد مفتاح محتوى جديد لتجنب خطأ فقدان المفتاح الخاص
           app-store-connect fetch-signing-files "com.jibli_stats" \
             --type IOS_APP_STORE \
-            --issuer-id $APP_STORE_CONNECT_ISSUER_ID \
-            --key-id $APP_STORE_CONNECT_KEY_ID \
+            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id "$APP_STORE_CONNECT_KEY_ID" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            --generate-content-key \
             --create
           keychain add-certificates
       - name: Build iOS IPA
         script: |
+          # بناء التطبيق بدون توقيع أولي
           flutter build ios --release --no-codesign
+          # استخدام أدوات Codemagic لتوقيع الملف النهائي IPA
           codemagic-cli-tools build-ipa --project-path ios --bundle-id "com.jibli_stats"
       - name: Publish to TestFlight
         script: |
           app-store-connect publish \
-            --issuer-id $APP_STORE_CONNECT_ISSUER_ID \
-            --key-id $APP_STORE_CONNECT_KEY_ID \
+            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id "$APP_STORE_CONNECT_KEY_ID" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
     artifacts:
       - build/ios/ipa/*.ipa
