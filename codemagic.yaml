@@ -25,10 +25,6 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        # سنعيد إضافة المتغيرات هنا مع كلمة integration لإجبار النظام على قبولها
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        key_id: $APP_STORE_CONNECT_KEY_ID
-        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
       email:
         recipients:
           - djilanibenhacine5@gmail.com
