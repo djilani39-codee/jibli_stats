@@ -153,7 +153,7 @@ class StatsController extends Controller
     try {
         $status = 5; // حالة "تم التسليم" فقط كما في الإكسيل
 
-        $markets = \App\Models\Market::select('id', 'name')
+        $markets = \App\Models\Market::select('id', 'name', 'admin_commission')
             ->get()
             ->map(function ($market) use ($status) {
                 
