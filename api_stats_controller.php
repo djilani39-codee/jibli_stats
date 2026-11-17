@@ -156,7 +156,7 @@ class StatsController extends Controller
 
         $markets = \App\Models\Market::select('id', 'name', 'admin_commission')
             ->get()
-            ->map(function ($market) use ($status) {
+            ->map(function ($market) use ($status, $tz) {
                 
                 // 1. حساب العمولات المستحقة فقط للطلبات المكتملة وغير المسواة
                 // (نفس منطق لوحة التحكم: Export Admin Commissions — admin_commission_paid = 0)
