@@ -90,6 +90,29 @@ class StatsController extends Controller
                 ->groupBy('u.id', 'u.name')
                 ->get();
 
+            // 6. طلبات اليوم (رقم الطلب، الزبون، السائق، وقت الحجز)
+            $todayOrders = DB::table('orders as o')
+                ->leftJoin('users as u', 'u.id', '=', 'o.user_id')
+                ->leftJoin('users as d', 'd.id', '=', 'o.driver_id')
+                ->whereBetween('o.created_at', [Carbon::today($tz)->startOfDay(), Carbon::today($tz)->endOfDay()])
+                ->orderBy('o.id', 'desc')
+                ->select(
+                    'o.id as order_id',
+                    'u.name as customer_name',
+                    'd.name as driver_name',
+                    'o.created_at'
+                )
+                ->limit(300)
+                ->get()
+                ->map(function ($o) use ($tz) {
+                    return [
+                        'order_id' => $o->order_id,
+                        'customer_name' => $o->customer_name,
+                        'driver_name' => $o->driver_name,
+                        'booked_at' => Carbon::parse($o->created_at)->setTimezone($tz)->format('H:i'),
+                    ];
+                });
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -97,7 +120,8 @@ class StatsController extends Controller
                     'period_avg' => $stats['count'] > 0 ? round($stats['profit'] / $stats['count'], 2) : 0,
                     'monthly_trend' => $monthlyTrend,
                     'daily_breakdown' => $dailyBreakdown,
-                    'active_drivers' => $activeDrivers
+                    'active_drivers' => $activeDrivers,
+                    'today_orders' => $todayOrders
                 ]
             ]);
 

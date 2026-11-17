@@ -254,6 +254,84 @@ class _JibliDashboardState extends State<JibliDashboard> {
     );
   }
 
+  // 5. قائمة طلبات اليوم
+  Widget _buildTodayOrders() {
+    if (data == null || data!['today_orders'] == null) return const SizedBox();
+    List orders = data!['today_orders'];
+
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("طلبات اليوم", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 10),
+          if (orders.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: Text("لا توجد طلبات بعد اليوم", style: GoogleFonts.cairo(fontSize: 13)),
+              ),
+            )
+          else ...[
+            Row(
+              children: [
+                Expanded(child: Text("رقم الطلب", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12))),
+                Expanded(child: Text("الزبون", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12))),
+                Expanded(child: Text("السائق", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12))),
+                Expanded(child: Text("وقت الحجز", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12))),
+              ],
+            ),
+            const Divider(),
+            ...orders.map((o) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        "#${o['order_id'] ?? '-'}",
+                        style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.orange.shade800),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        o['customer_name']?.toString() ?? '-',
+                        style: GoogleFonts.cairo(fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        o['driver_name']?.toString() ?? '—',
+                        style: GoogleFonts.cairo(fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        o['booked_at']?.toString() ?? '-',
+                        style: GoogleFonts.cairo(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -296,6 +374,7 @@ class _JibliDashboardState extends State<JibliDashboard> {
                   ),
                   const SizedBox(height: 15),
                   _buildMonthlyChart(),
+                  _buildTodayOrders(),
                   _buildMonthlyTrendTable(),
                   const SizedBox(height: 30),
                   Text(
