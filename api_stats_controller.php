@@ -13,7 +13,7 @@ class StatsController extends Controller
     {
         try {
             $period = $request->get('period', 'today');
-            $status = 5; // حالة التوصيل
+            $status = 5; // حالة الطلب "مكتمل"
             $tz = 'Africa/Algiers';
 
             // 1. تحديد النطاق الزمني
@@ -31,45 +31,50 @@ class StatsController extends Controller
                 $to = Carbon::today($tz)->endOfDay();
             }
 
-            // 2. حساب إحصائيات الفترة المختارة
+            // 2. إحصائيات الفترة الحالية
             $stats = $this->calculateStats($from, $to, $status);
 
-            // 3. تحليل الأشهر (الرسم البياني)
+            // 3. تحليل الأشهر الستة الأخيرة + المتوسط الشهري
             $monthlyTrend = [];
             for ($i = 5; $i >= 0; $i--) {
                 $mStart = Carbon::now($tz)->subMonths($i)->startOfMonth();
                 $mEnd = Carbon::now($tz)->subMonths($i)->endOfMonth();
                 $mStats = $this->calculateStats($mStart, $mEnd, $status);
                 
+                // حساب المتوسط لهذا الشهر
+                $monthlyAvg = $mStats['count'] > 0 ? ($mStats['profit'] / $mStats['count']) : 0;
+
                 $monthlyTrend[] = [
                     'month_name' => $mStart->translatedFormat('M'),
                     'profit' => round($mStats['profit'], 2),
-                    'orders' => $mStats['count']
+                    'orders' => $mStats['count'],
+                    'monthly_avg' => round($monthlyAvg, 2) // العمود الثالث المطلوب بالدينار
                 ];
             }
 
-            // 4. السجل اليومي + أداء الموصلين (آخر 30 يوم)
+            // 4. السجل اليومي (آخر 30 يوم) مع معالجة الطلبات بدون موزع
             $dailyBreakdown = DB::table('orders')
                 ->where('order_status_id', $status)
                 ->select(DB::raw('DATE(created_at) as order_day'))
                 ->groupBy('order_day')
                 ->orderBy('order_day', 'desc')
-                ->limit(30) // تم التغيير من 7 إلى 30 يوم
+                ->limit(30)
                 ->get()
                 ->map(function($day) use ($status, $tz) {
                     $dStart = Carbon::parse($day->order_day, $tz)->startOfDay();
                     $dEnd = Carbon::parse($day->order_day, $tz)->endOfDay();
-                    
-                    // حساب أرباح اليوم
                     $dStats = $this->calculateStats($dStart, $dEnd, $status);
                     
-                    // جلب الموصلين لهذا اليوم
+                    // جلب الموزعين + احتساب الطلبات بدون موزع (Left Join)
                     $drivers = DB::table('orders as o')
-                        ->join('users as u', 'u.id', '=', 'o.driver_id')
+                        ->leftJoin('users as u', 'u.id', '=', 'o.driver_id')
                         ->where('o.order_status_id', $status)
                         ->whereBetween('o.created_at', [$dStart, $dEnd])
-                        ->select('u.name', DB::raw('count(o.id) as orders_count'))
-                        ->groupBy('u.id', 'u.name')
+                        ->select(
+                            DB::raw('IFNULL(u.name, "استلام من المحل / بدون موزع") as name'), 
+                            DB::raw('count(o.id) as orders_count')
+                        )
+                        ->groupBy('o.driver_id', 'u.name')
                         ->get();
 
                     return [
@@ -81,16 +86,7 @@ class StatsController extends Controller
                     ];
                 });
 
-            // 5. الموزعون النشطون اليوم
-            $activeDrivers = DB::table('orders as o')
-                ->join('users as u', 'u.id', '=', 'o.driver_id')
-                ->where('o.order_status_id', $status)
-                ->whereBetween('o.created_at', [Carbon::today($tz)->startOfDay(), Carbon::today($tz)->endOfDay()])
-                ->select('u.name', DB::raw('count(o.id) as orders_delivered'))
-                ->groupBy('u.id', 'u.name')
-                ->get();
-
-            // 6. طلبات اليوم (رقم الطلب، الزبون، السائق، وقت الحجز)
+            // 5. طلبات اليوم (رقم الطلب، الزبون، السائق، وقت الحجز)
             $todayOrders = DB::table('orders as o')
                 ->leftJoin('users as u', 'u.id', '=', 'o.user_id')
                 ->leftJoin('users as d', 'd.id', '=', 'o.driver_id')
@@ -120,7 +116,6 @@ class StatsController extends Controller
                     'period_avg' => $stats['count'] > 0 ? round($stats['profit'] / $stats['count'], 2) : 0,
                     'monthly_trend' => $monthlyTrend,
                     'daily_breakdown' => $dailyBreakdown,
-                    'active_drivers' => $activeDrivers,
                     'today_orders' => $todayOrders
                 ]
             ]);
@@ -131,16 +126,72 @@ class StatsController extends Controller
     }
 
     private function calculateStats($from, $to, $status) {
-        $orders = DB::table('orders')->where('order_status_id', $status)->whereBetween('created_at', [$from, $to]);
-        $count = $orders->count();
-        $serviceFees = $orders->sum(DB::raw('service_fee + 30'));
+        $ordersQuery = DB::table('orders')
+            ->where('order_status_id', $status)
+            ->whereBetween('created_at', [$from, $to]);
+
+        $count = $ordersQuery->count();
+        $serviceFeesAndFixed = $ordersQuery->sum(DB::raw('service_fee + 30'));
+
         $commissions = DB::table('product_orders as po')
             ->join('orders as o', 'o.id', '=', 'po.order_id')
             ->join('products as p', 'p.id', '=', 'po.product_id')
             ->join('markets as m', 'm.id', '=', 'p.market_id')
             ->where('o.order_status_id', $status)
             ->whereBetween('o.created_at', [$from, $to])
-            ->sum(DB::raw('po.price * m.admin_commission / 100'));
-        return ['profit' => (float)$commissions + $serviceFees, 'count' => $count];
+            ->select(DB::raw('SUM(po.price * po.quantity * m.admin_commission / 100) as total_admin_percent'))
+            ->first()->total_admin_percent ?? 0;
+
+        return [
+            'profit' => (float)$commissions + (float)$serviceFeesAndFixed, 
+            'count' => $count
+        ];
     }
+    
+    public function getMarketsDebts(Request $request)
+{
+    try {
+        $status = 5; // حالة "تم التسليم" فقط كما في الإكسيل
+
+        $markets = \App\Models\Market::select('id', 'name')
+            ->get()
+            ->map(function ($market) use ($status) {
+                
+                // 1. حساب إجمالي العمولات (Commission) فقط للطلبات المكتملة
+                // هذا هو الرقم الذي يظهر في عمود "Commission" في الإكسيل
+                $totalCommission = \DB::table('product_orders as po')
+                    ->join('orders as o', 'o.id', '=', 'po.order_id')
+                    ->join('products as p', 'p.id', '=', 'po.product_id')
+                    ->where('p.market_id', $market->id)
+                    ->where('o.order_status_id', $status) // التصفية حسب الحالة 5
+                    ->select(\DB::raw('SUM(po.price * po.quantity * po.commission / 100) as total'))
+                    ->first()->total ?? 0;
+
+                // 2. طرح المبالغ التي دفعتها أنت للمحل سابقاً (إن وجدت في الجدول)
+                $totalPaidToAdmin = \DB::table('markets_payouts')
+                    ->where('market_id', $market->id)
+                    ->sum('amount');
+
+                // 3. الصافي المطلوب تحصيله الآن
+                $currentDebt = $totalCommission - $totalPaidToAdmin;
+
+                return [
+                    'id' => $market->id,
+                    'name' => $market->name,
+                    'debt' => round($currentDebt, 2), 
+                ];
+            })
+            ->where('debt', '>', 0)
+            ->values();
+
+        return response()->json([
+            'success' => true,
+            'data' => $markets,
+            'total_debts' => $markets->sum('debt')
+        ]);
+
+    } catch (\Exception $e) {
+        return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+    }
+}
 }
