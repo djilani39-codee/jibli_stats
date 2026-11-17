@@ -37,6 +37,10 @@ dependencies:
   fl_chart: ^0.63.0
   http: ^1.6.0
   google_fonts: ^6.3.2
+  pdf: ^3.12.0
+  excel: ^4.0.6
+  share_plus: ^13.3.1
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:
@@ -60,6 +64,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/fonts/Amiri-Regular.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

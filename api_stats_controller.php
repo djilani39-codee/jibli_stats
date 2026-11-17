@@ -157,29 +157,31 @@ class StatsController extends Controller
             ->get()
             ->map(function ($market) use ($status) {
                 
-                // 1. حساب إجمالي العمولات (Commission) فقط للطلبات المكتملة
-                // ملاحظة: العمود po.commission غير موجود في product_orders — العمولة الحقيقية في markets.admin_commission
-                $totalCommission = \DB::table('product_orders as po')
+                // 1. حساب العمولات المستحقة فقط للطلبات المكتملة وغير المسواة
+                // (نفس منطق لوحة التحكم: Export Admin Commissions — admin_commission_paid = 0)
+                $marketData = \DB::table('product_orders as po')
                     ->join('orders as o', 'o.id', '=', 'po.order_id')
                     ->join('products as p', 'p.id', '=', 'po.product_id')
-                    ->join('markets as m', 'm.id', '=', 'p.market_id')
                     ->where('p.market_id', $market->id)
                     ->where('o.order_status_id', $status) // التصفية حسب الحالة 5
-                    ->select(\DB::raw('SUM(po.price * po.quantity * m.admin_commission / 100) as total'))
-                    ->first()->total ?? 0;
+                    ->where('o.admin_commission_paid', 0) // فقط الطلبات غير المسواة
+                    ->select(
+                        \DB::raw('COALESCE(SUM(po.price * po.quantity), 0) as total_orders_amount'),
+                        \DB::raw('COALESCE(SUM(po.price * po.quantity), 0) * ' . (float)($market->admin_commission ?? 0) . ' / 100 as commission'),
+                        \DB::raw('COUNT(DISTINCT o.id) as orders_count')
+                    )
+                    ->first();
 
-                // 2. طرح المبالغ التي دفعتها أنت للمحل سابقاً (إن وجدت في الجدول)
-                $totalPaidToAdmin = \DB::table('markets_payouts')
-                    ->where('market_id', $market->id)
-                    ->sum('amount');
-
-                // 3. الصافي المطلوب تحصيله الآن
-                $currentDebt = $totalCommission - $totalPaidToAdmin;
+                $totalOrdersAmount = (float)($marketData->total_orders_amount ?? 0);
+                $currentDebt = (float)($marketData->commission ?? 0);
 
                 return [
                     'id' => $market->id,
                     'name' => $market->name,
-                    'debt' => round($currentDebt, 2), 
+                    'admin_commission' => (float)($market->admin_commission ?? 0),
+                    'orders_count' => (int)($marketData->orders_count ?? 0),
+                    'total_orders_amount' => round($totalOrdersAmount, 2),
+                    'debt' => round($currentDebt, 2),
                 ];
             })
             ->where('debt', '>', 0)
@@ -188,7 +190,8 @@ class StatsController extends Controller
         return response()->json([
             'success' => true,
             'data' => $markets,
-            'total_debts' => $markets->sum('debt')
+            'total_debts' => $markets->sum('debt'),
+            'total_orders_amount' => $markets->sum('total_orders_amount'),
         ]);
 
     } catch (\Exception $e) {
