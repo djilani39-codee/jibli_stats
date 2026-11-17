@@ -117,6 +117,9 @@ class _JibliDashboardState extends State<JibliDashboard> {
                     _buildDailyListWithDrivers(), // الموصلين في مستطيلات
                     const SizedBox(height: 25),
                     _buildMarketsDebts(), // حسابات المطاعم (قسم سفلي)
+                    const SizedBox(height: 25),
+                    _buildSectionTitle("فلكسي الموزعين"),
+                    _buildDriversFlexi(), // فلكسي الموزعين النشطين آخر شهر
                   ],
                 ),
               ),
@@ -665,6 +668,172 @@ class _JibliDashboardState extends State<JibliDashboard> {
     );
   }
 
+  Widget _buildDriversFlexi() {
+    final flexi = debts?['flexi'];
+    if (flexi == null || flexi['data'] == null) return const SizedBox();
+    List users = flexi['data'];
+    int count = (flexi['count'] is int) ? flexi['count'] : int.tryParse('${flexi['count']}') ?? 0;
+    int totalFlexi = (flexi['total'] is int) ? flexi['total'] : int.tryParse('${flexi['total']}') ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  "الموزعون النشطون (آخر 30 يوم)",
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
+                tooltip: "تصدير PDF",
+                onPressed: users.isEmpty ? null : _exportFlexiPdf,
+              ),
+              IconButton(
+                icon: Icon(Icons.grid_on, color: Colors.green.shade700),
+                tooltip: "تصدير Excel",
+                onPressed: users.isEmpty ? null : _exportFlexiExcel,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // ملخص: عدد الموزعين + إجمالي الفلكسي
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      Text("عدد الموزعين", style: GoogleFonts.cairo(fontSize: 11, color: Colors.grey.shade700)),
+                      const SizedBox(height: 4),
+                      Text("$count", style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue.shade800)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      Text("إجمالي الفلكسي", style: GoogleFonts.cairo(fontSize: 11, color: Colors.grey.shade700)),
+                      const SizedBox(height: 4),
+                      Text("$totalFlexi", style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (users.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: Text(
+                  "لا يوجد موزعون نشطون",
+                  style: GoogleFonts.cairo(fontSize: 13, color: Colors.grey),
+                ),
+              ),
+            )
+          else ...[
+            Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Text("الموزع", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 11)),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Text("الهاتف", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text("طلبات آخر شهر", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text("الفلكسي", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.left),
+                ),
+              ],
+            ),
+            const Divider(),
+            ...users.map((u) {
+              int credit = (u['credit'] is int) ? u['credit'] : int.tryParse('${u['credit']}') ?? 0;
+              int orders30 = (u['orders_30'] is int) ? u['orders_30'] : int.tryParse('${u['orders_30']}') ?? 0;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        "${u['name'] ?? '-'}",
+                        style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        "${u['phone'] ?? '-'}",
+                        style: GoogleFonts.cairo(fontSize: 11, color: Colors.blueGrey),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        "$orders30",
+                        style: GoogleFonts.cairo(fontSize: 12, color: Colors.blue.shade700),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        "$credit",
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade900,
+                        ),
+                        textAlign: TextAlign.left,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ],
+        ],
+      ),
+    );
+  }
+
   // جلب بيانات الجدول الجاهزة للتصدير
   List<List<String>> _debtsTableData() {
     List markets = debts?['data'] ?? [];
@@ -904,6 +1073,112 @@ class _JibliDashboardState extends State<JibliDashboard> {
       await Share.shareXFiles([XFile(file.path)], text: 'حسابات $name');
     } catch (e) {
       debugPrint("Market PDF Export Error: $e");
+    }
+  }
+
+  // جلب صفوف جدول الفلكسي للتصدير
+  List<List<String>> _flexiTableData() {
+    final flexi = debts?['flexi'];
+    List users = (flexi?['data'] ?? []) as List;
+    int count = _toDouble(flexi?['count']).toInt();
+    int totalFlexi = _toDouble(flexi?['total']).toInt();
+
+    final rows = <List<String>>[
+      ['الموزع', 'الهاتف', 'طلبات آخر شهر', 'الفلكسي'],
+    ];
+    for (var u in users) {
+      rows.add([
+        u['name']?.toString() ?? '-',
+        u['phone']?.toString() ?? '-',
+        '${u['orders_30'] ?? 0}',
+        '${u['credit'] ?? 0}',
+      ]);
+    }
+    rows.add(['الإجمالي - $count موزع', '', '', '$totalFlexi']);
+    return rows;
+  }
+
+  // تصدير PDF لفلكسي الموزعين
+  Future<void> _exportFlexiPdf() async {
+    try {
+      final ttf = await _loadArabicFont();
+      final pdf = pw.Document();
+      final tableData = _flexiTableData();
+      final now = DateTime.now();
+
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) {
+            return pw.Directionality(
+              textDirection: pw.TextDirection.rtl,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'فلكسي الموزعين - جيبلي',
+                    style: pw.TextStyle(font: ttf, fontSize: 18, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.Text(
+                    'الموزعون النشطون آخر 30 يوم - ${now.year}/${now.month}/${now.day}',
+                    style: pw.TextStyle(font: ttf, fontSize: 10, color: const PdfColor.fromInt(0xFF777777)),
+                  ),
+                  pw.SizedBox(height: 12),
+                  pw.TableHelper.fromTextArray(
+                    headers: tableData.first,
+                    data: tableData.sublist(1),
+                    headerStyle: pw.TextStyle(font: ttf, fontSize: 11, fontWeight: pw.FontWeight.bold),
+                    cellStyle: pw.TextStyle(font: ttf, fontSize: 10),
+                    cellAlignment: pw.Alignment.center,
+                    headerAlignment: pw.Alignment.center,
+                    border: pw.TableBorder.all(color: const PdfColor.fromInt(0xFFCCCCCC), width: 0.5),
+                    cellPadding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                  ),
+                  pw.SizedBox(height: 12),
+                  pw.Text(
+                    'تم التصدير من تطبيق جيبلي ستاتس',
+                    style: pw.TextStyle(font: ttf, fontSize: 9, color: const PdfColor.fromInt(0xFF999999)),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/drivers_flexi_${now.year}-${now.month}-${now.day}.pdf');
+      await file.writeAsBytes(await pdf.save());
+      await Share.shareXFiles([XFile(file.path)], text: 'فلكسي الموزعين');
+    } catch (e) {
+      debugPrint("Flexi PDF Export Error: $e");
+    }
+  }
+
+  // تصدير Excel لفلكسي الموزعين
+  Future<void> _exportFlexiExcel() async {
+    try {
+      final excel = Excel.createExcel();
+      final sheet = excel['فلكسي الموزعين'];
+      final tableData = _flexiTableData();
+      final now = DateTime.now();
+
+      for (final row in tableData) {
+        sheet.appendRow(row.map((c) => TextCellValue(c.toString())).toList());
+      }
+
+      sheet.setColumnWidth(0, 30);
+      sheet.setColumnWidth(1, 18);
+      sheet.setColumnWidth(2, 16);
+      sheet.setColumnWidth(3, 14);
+
+      final bytes = excel.encode()!;
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/drivers_flexi_${now.year}-${now.month}-${now.day}.xlsx');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles([XFile(file.path)], text: 'فلكسي الموزعين');
+    } catch (e) {
+      debugPrint("Flexi Excel Export Error: $e");
     }
   }
 }
