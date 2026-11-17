@@ -152,6 +152,7 @@ class StatsController extends Controller
 {
     try {
         $status = 5; // حالة "تم التسليم" فقط كما في الإكسيل
+        $tz = 'Africa/Algiers';
 
         $markets = \App\Models\Market::select('id', 'name', 'admin_commission')
             ->get()
