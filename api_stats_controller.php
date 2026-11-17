@@ -234,11 +234,49 @@ class StatsController extends Controller
             ->where('debt', '>', 0)
             ->values();
 
+        // ===== فلكسي الموزعين (دور driver) النشطين آخر 30 يوم =====
+        // "النشط" = له طلب توصيل مكتمل آخر 30 يوم (orders.driver_id = users.id)
+        $flexiUsers = \DB::table('users as u')
+            ->join('model_has_roles as mhr', function ($j) {
+                $j->on('mhr.model_id', '=', 'u.id')
+                  ->where('mhr.model_type', '=', 'App\\Models\\User')
+                  ->where('mhr.role_id', '=', 5);
+            })
+            ->join('orders as o', function ($j) use ($status) {
+                $j->on('o.driver_id', '=', 'u.id')
+                  ->where('o.order_status_id', '=', $status)
+                  ->where('o.created_at', '>=', \DB::raw('DATE_SUB(NOW(), INTERVAL 30 DAY)'));
+            })
+            ->groupBy('u.id', 'u.name', 'u.phone', 'u.credit')
+            ->orderByRaw('COUNT(o.id) DESC')
+            ->get([
+                'u.id',
+                'u.name',
+                'u.phone',
+                'u.credit',
+                \DB::raw('COUNT(o.id) as orders_30'),
+            ]);
+
+        $flexi = [
+            'count' => $flexiUsers->count(),
+            'total' => (int) $flexiUsers->sum('credit'),
+            'data'  => $flexiUsers->map(function ($u) {
+                return [
+                    'id'        => $u->id,
+                    'name'      => $u->name,
+                    'phone'     => $u->phone,
+                    'credit'    => (int) $u->credit,
+                    'orders_30' => (int) $u->orders_30,
+                ];
+            })->values(),
+        ];
+
         return response()->json([
             'success' => true,
             'data' => $markets,
             'total_debts' => $markets->sum('debt'),
             'total_orders_amount' => $markets->sum('total_orders_amount'),
+            'flexi' => $flexi,
         ]);
 
     } catch (\Exception $e) {
