@@ -175,6 +175,51 @@ class StatsController extends Controller
                 $totalOrdersAmount = (float)($marketData->total_orders_amount ?? 0);
                 $currentDebt = (float)($marketData->commission ?? 0);
 
+                // تفاصيل الطلبات غير المسواة (صف لكل منتج مطلوب — مثل Export Admin Commissions)
+                $details = \DB::table('product_orders as po')
+                    ->join('orders as o', 'o.id', '=', 'po.order_id')
+                    ->join('products as p', 'p.id', '=', 'po.product_id')
+                    ->leftJoin('product_order_options as poo', 'poo.product_order_id', '=', 'po.id')
+                    ->leftJoin('options as op', 'op.id', '=', 'poo.option_id')
+                    ->where('p.market_id', $market->id)
+                    ->where('o.order_status_id', $status)
+                    ->where('o.admin_commission_paid', 0)
+                    ->select(
+                        'po.id as po_id',
+                        'p.name as product_name',
+                        'po.price',
+                        'po.quantity',
+                        'o.id as order_id',
+                        'o.created_at',
+                        'op.name as option_name'
+                    )
+                    ->orderBy('o.id', 'desc')
+                    ->limit(500)
+                    ->get();
+
+                // تجميع الخيارات مع كل منتج
+                $rows = [];
+                foreach ($details as $d) {
+                    $key = $d->po_id;
+                    if (!isset($rows[$key])) {
+                        $total = (float)$d->price * (int)$d->quantity;
+                        $rows[$key] = [
+                            'product_name' => $d->product_name,
+                            'price' => round((float)$d->price, 2),
+                            'quantity' => (int)$d->quantity,
+                            'total' => round($total, 2),
+                            'commission' => round($total * (float)($market->admin_commission ?? 0) / 100, 2),
+                            'order_id' => $d->order_id,
+                            'ordered_at' => Carbon::parse($d->created_at)->setTimezone($tz)->format('Y-m-d H:i'),
+                            'options' => [],
+                        ];
+                    }
+                    if (!empty($d->option_name)) {
+                        $rows[$key]['options'][] = $d->option_name;
+                    }
+                }
+                $rows = array_values($rows);
+
                 return [
                     'id' => $market->id,
                     'name' => $market->name,
@@ -182,6 +227,7 @@ class StatsController extends Controller
                     'orders_count' => (int)($marketData->orders_count ?? 0),
                     'total_orders_amount' => round($totalOrdersAmount, 2),
                     'debt' => round($currentDebt, 2),
+                    'details' => $rows,
                 ];
             })
             ->where('debt', '>', 0)

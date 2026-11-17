@@ -7,7 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' hide Border;
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -520,7 +520,7 @@ class _JibliDashboardState extends State<JibliDashboard> {
                 onPressed: markets.isEmpty ? null : _exportPdf,
               ),
               IconButton(
-                icon: const Icon(Icons.grid_on, color: Colors.green.shade700),
+                icon: Icon(Icons.grid_on, color: Colors.green.shade700),
                 tooltip: "تصدير Excel",
                 onPressed: markets.isEmpty ? null : _exportExcel,
               ),
@@ -572,11 +572,25 @@ class _JibliDashboardState extends State<JibliDashboard> {
                   children: [
                     Expanded(
                       flex: 3,
-                      child: Text(
-                        "${m['name'] ?? '-'}",
-                        style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              "${m['name'] ?? '-'}",
+                              style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          InkWell(
+                            onTap: () => _exportMarketPdf(m),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(Icons.picture_as_pdf, size: 17, color: Colors.red.shade400),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Expanded(
@@ -652,31 +666,35 @@ class _JibliDashboardState extends State<JibliDashboard> {
   }
 
   // جلب بيانات الجدول الجاهزة للتصدير
-  List<List<dynamic>> _debtsTableData() {
+  List<List<String>> _debtsTableData() {
     List markets = debts?['data'] ?? [];
     double total = _toDouble(debts?['total_debts']);
     double totalAmount = _toDouble(debts?['total_orders_amount']);
 
-    final rows = <List<dynamic>>[
+    final rows = <List<String>>[
       ['المطعم', 'عدد الطلبات', 'مجموع الطلبات', 'العمولة المستحقة'],
     ];
     for (var m in markets) {
       rows.add([
         m['name']?.toString() ?? '-',
         '${m['orders_count'] ?? 0}',
-        '${_toDouble(m['total_orders_amount']).toStringAsFixed(2)}',
-        '${_toDouble(m['debt']).toStringAsFixed(2)}',
+        _toDouble(m['total_orders_amount']).toStringAsFixed(2),
+        _toDouble(m['debt']).toStringAsFixed(2),
       ]);
     }
     rows.add(['الإجمالي', '', totalAmount.toStringAsFixed(2), total.toStringAsFixed(2)]);
     return rows;
   }
 
-  // تصدير PDF
+  Future<pw.Font> _loadArabicFont() async {
+    final fontData = await rootBundle.load('assets/fonts/Amiri-Regular.ttf');
+    return pw.Font.ttf(fontData);
+  }
+
+  // تصدير PDF (قائمة المطاعم)
   Future<void> _exportPdf() async {
     try {
-      final fontData = await rootBundle.load('assets/fonts/Amiri-Regular.ttf');
-      final ttf = pw.Font.ttf(fontData);
+      final ttf = await _loadArabicFont();
       final pdf = pw.Document();
       final tableData = _debtsTableData();
       final now = DateTime.now();
@@ -699,15 +717,14 @@ class _JibliDashboardState extends State<JibliDashboard> {
                     style: pw.TextStyle(font: ttf, fontSize: 10, color: const PdfColor.fromInt(0xFF777777)),
                   ),
                   pw.SizedBox(height: 12),
-                  pw.Table.fromTextArray(
-                    headers: tableData.first.cast<String>(),
-                    data: tableData.sublist(1).map((r) => r.map((c) => c.toString()).toList()).toList(),
+                  pw.TableHelper.fromTextArray(
+                    headers: tableData.first,
+                    data: tableData.sublist(1),
                     headerStyle: pw.TextStyle(font: ttf, fontSize: 11, fontWeight: pw.FontWeight.bold),
                     cellStyle: pw.TextStyle(font: ttf, fontSize: 10),
                     cellAlignment: pw.Alignment.center,
                     headerAlignment: pw.Alignment.center,
                     border: pw.TableBorder.all(color: const PdfColor.fromInt(0xFFCCCCCC), width: 0.5),
-                    oddRowColor: const PdfColor.fromInt(0xFFF8F9FB),
                     cellPadding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 4),
                   ),
                   pw.SizedBox(height: 12),
@@ -723,7 +740,7 @@ class _JibliDashboardState extends State<JibliDashboard> {
       );
 
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/حسابات_المطاعم_${now.year}-${now.month}-${now.day}.pdf');
+      final file = File('${dir.path}/markets_accounts_${now.year}-${now.month}-${now.day}.pdf');
       await file.writeAsBytes(await pdf.save());
       await Share.shareXFiles([XFile(file.path)], text: 'حسابات المطاعم');
     } catch (e) {
@@ -740,7 +757,7 @@ class _JibliDashboardState extends State<JibliDashboard> {
       final now = DateTime.now();
 
       for (final row in tableData) {
-        sheet.appendRow(row);
+        sheet.appendRow(row.map((c) => TextCellValue(c.toString())).toList());
       }
 
       // تنسيق عرض الأعمدة
@@ -751,11 +768,142 @@ class _JibliDashboardState extends State<JibliDashboard> {
 
       final bytes = excel.encode()!;
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/حسابات_المطاعم_${now.year}-${now.month}-${now.day}.xlsx');
+      final file = File('${dir.path}/markets_accounts_${now.year}-${now.month}-${now.day}.xlsx');
       await file.writeAsBytes(bytes);
       await Share.shareXFiles([XFile(file.path)], text: 'حسابات المطاعم');
     } catch (e) {
       debugPrint("Excel Export Error: $e");
+    }
+  }
+
+  // PDF تفصيلي لمطعم واحد: كل طلباته غير المسواة بالتفصيل
+  Future<void> _exportMarketPdf(Map m) async {
+    try {
+      final ttf = await _loadArabicFont();
+      final pdf = pw.Document();
+      final now = DateTime.now();
+
+      final name = m['name']?.toString() ?? '-';
+      final rate = _toDouble(m['admin_commission']);
+      final ordersCount = m['orders_count']?.toString() ?? '0';
+      final totalAmount = _toDouble(m['total_orders_amount']);
+      final debt = _toDouble(m['debt']);
+      List details = m['details'] ?? [];
+
+      // صفوف التفاصيل: منتج [خيارات] | سعر | كمية | مجموع | عمولة | رقم الطلب | وقت الطلب
+      final tableRows = <List<String>>[];
+      for (var d in details) {
+        final opts = (d['options'] is List) ? (d['options'] as List).join(' + ') : '';
+        String productName = d['product_name']?.toString() ?? '-';
+        if (opts.isNotEmpty) productName += ' [$opts]';
+        tableRows.add([
+          productName,
+          _toDouble(d['price']).toStringAsFixed(2),
+          '${d['quantity'] ?? ''}',
+          _toDouble(d['total']).toStringAsFixed(2),
+          _toDouble(d['commission']).toStringAsFixed(2),
+          '#${d['order_id'] ?? ''}',
+          d['ordered_at']?.toString() ?? '',
+        ]);
+      }
+      // صف الإجمالي
+      tableRows.add([
+        'الإجمالي',
+        '',
+        ordersCount,
+        totalAmount.toStringAsFixed(2),
+        debt.toStringAsFixed(2),
+        '',
+        '',
+      ]);
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          textDirection: pw.TextDirection.rtl,
+          build: (pw.Context context) => [
+            // اسم المطعم في الأعلى + المجموع
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                color: const PdfColor.fromInt(0xFFFFF3E0),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    name,
+                    style: pw.TextStyle(font: ttf, fontSize: 20, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'تفاصيل الطلبات غير المسواة - العمولة ${rate.toStringAsFixed(0)}% - ${now.year}/${now.month}/${now.day}',
+                    style: pw.TextStyle(font: ttf, fontSize: 10, color: const PdfColor.fromInt(0xFF777777)),
+                  ),
+                  pw.SizedBox(height: 8),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                    children: [
+                      pw.Column(children: [
+                        pw.Text('عدد الطلبات', style: pw.TextStyle(font: ttf, fontSize: 9, color: const PdfColor.fromInt(0xFF888888))),
+                        pw.Text(ordersCount, style: pw.TextStyle(font: ttf, fontSize: 13, fontWeight: pw.FontWeight.bold)),
+                      ]),
+                      pw.Column(children: [
+                        pw.Text('مجموع الطلبات', style: pw.TextStyle(font: ttf, fontSize: 9, color: const PdfColor.fromInt(0xFF888888))),
+                        pw.Text('${totalAmount.toStringAsFixed(2)} دج', style: pw.TextStyle(font: ttf, fontSize: 13, fontWeight: pw.FontWeight.bold)),
+                      ]),
+                      pw.Column(children: [
+                        pw.Text('العمولة المستحقة', style: pw.TextStyle(font: ttf, fontSize: 9, color: const PdfColor.fromInt(0xFF888888))),
+                        pw.Text('${debt.toStringAsFixed(2)} دج', style: pw.TextStyle(font: ttf, fontSize: 13, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFFB71C1C))),
+                      ]),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 12),
+            pw.TableHelper.fromTextArray(
+              headers: ['المنتج [الخيارات]', 'السعر', 'الكمية', 'المجموع', 'العمولة', 'رقم الطلب', 'وقت الطلب'],
+              data: tableRows,
+              headerStyle: pw.TextStyle(font: ttf, fontSize: 10, fontWeight: pw.FontWeight.bold),
+              cellStyle: pw.TextStyle(font: ttf, fontSize: 9),
+              cellAlignment: pw.Alignment.center,
+              headerAlignment: pw.Alignment.center,
+              border: pw.TableBorder.all(color: const PdfColor.fromInt(0xFFCCCCCC), width: 0.5),
+              headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF0F0F0)),
+              cellPadding: const pw.EdgeInsets.symmetric(vertical: 3, horizontal: 3),
+              columnWidths: {
+                0: const pw.FixedColumnWidth(110),
+                1: const pw.FixedColumnWidth(45),
+                2: const pw.FixedColumnWidth(35),
+                3: const pw.FixedColumnWidth(55),
+                4: const pw.FixedColumnWidth(55),
+                5: const pw.FixedColumnWidth(50),
+                6: const pw.FixedColumnWidth(75),
+              },
+            ),
+            pw.SizedBox(height: 10),
+            pw.Text(
+              'تم التصدير من تطبيق جيبلي ستاتس',
+              style: pw.TextStyle(font: ttf, fontSize: 9, color: const PdfColor.fromInt(0xFF999999)),
+            ),
+          ],
+        ),
+      );
+
+      // اسم ملف ASCII لضمان الفتح على كل الأجهزة
+      final safeName = name
+          .replaceAll(RegExp(r'[^\x00-\x7F]'), '')
+          .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')
+          .trim();
+      final fileName = 'debt_${safeName.isEmpty ? 'market' : safeName}_${now.year}-${now.month}-${now.day}.pdf';
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsBytes(await pdf.save());
+      await Share.shareXFiles([XFile(file.path)], text: 'حسابات $name');
+    } catch (e) {
+      debugPrint("Market PDF Export Error: $e");
     }
   }
 }
