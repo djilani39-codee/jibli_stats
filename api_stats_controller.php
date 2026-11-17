@@ -158,13 +158,14 @@ class StatsController extends Controller
             ->map(function ($market) use ($status) {
                 
                 // 1. حساب إجمالي العمولات (Commission) فقط للطلبات المكتملة
-                // هذا هو الرقم الذي يظهر في عمود "Commission" في الإكسيل
+                // ملاحظة: العمود po.commission غير موجود في product_orders — العمولة الحقيقية في markets.admin_commission
                 $totalCommission = \DB::table('product_orders as po')
                     ->join('orders as o', 'o.id', '=', 'po.order_id')
                     ->join('products as p', 'p.id', '=', 'po.product_id')
+                    ->join('markets as m', 'm.id', '=', 'p.market_id')
                     ->where('p.market_id', $market->id)
                     ->where('o.order_status_id', $status) // التصفية حسب الحالة 5
-                    ->select(\DB::raw('SUM(po.price * po.quantity * po.commission / 100) as total'))
+                    ->select(\DB::raw('SUM(po.price * po.quantity * m.admin_commission / 100) as total'))
                     ->first()->total ?? 0;
 
                 // 2. طرح المبالغ التي دفعتها أنت للمحل سابقاً (إن وجدت في الجدول)

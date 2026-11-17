@@ -17,6 +17,7 @@ class JibliDashboard extends StatefulWidget {
 
 class _JibliDashboardState extends State<JibliDashboard> {
   Map<String, dynamic>? data;
+  Map<String, dynamic>? debts; // حسابات المطاعم (ديون المحلات)
   String selectedPeriod = 'today';
   bool isLoading = true;
 
@@ -49,10 +50,26 @@ class _JibliDashboardState extends State<JibliDashboard> {
     }
   }
 
+  Future<void> fetchDebts() async {
+    try {
+      final response = await http.get(
+        Uri.parse('https://foodwood.site/jibli/public/api/markets-debts'),
+      );
+      if (response.statusCode == 200) {
+        setState(() {
+          debts = json.decode(response.body);
+        });
+      }
+    } catch (e) {
+      debugPrint("Debts Error: $e");
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     fetchData('today');
+    fetchDebts();
   }
 
   @override
@@ -87,9 +104,12 @@ class _JibliDashboardState extends State<JibliDashboard> {
                     const SizedBox(height: 25),
                     _buildSectionTitle("نمو الأرباح والطلبات"),
                     _buildCorrectedChart(), // المنحنى المنضبط داخل المربع
+                    _buildTodayOrders(),
                     const SizedBox(height: 25),
                     _buildSectionTitle("السجل اليومي وأداء الموصلين"),
                     _buildDailyListWithDrivers(), // الموصلين في مستطيلات
+                    const SizedBox(height: 25),
+                    _buildMarketsDebts(), // حسابات المطاعم (قسم سفلي)
                   ],
                 ),
               ),
@@ -364,4 +384,183 @@ class _JibliDashboardState extends State<JibliDashboard> {
       ),
     ),
   );
+
+  // قسم طلبات اليوم: رقم الطلب، الزبون، السائق، وقت الحجز
+  Widget _buildTodayOrders() {
+    if (data == null || data!['today_orders'] == null) return const SizedBox();
+    List orders = data!['today_orders'];
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "طلبات اليوم",
+            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+          const SizedBox(height: 10),
+          if (orders.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: Text(
+                  "لا توجد طلبات بعد اليوم",
+                  style: GoogleFonts.cairo(fontSize: 13, color: Colors.grey),
+                ),
+              ),
+            )
+          else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text("رقم الطلب", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 11)),
+                ),
+                Expanded(
+                  child: Text("الزبون", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 11)),
+                ),
+                Expanded(
+                  child: Text("السائق", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 11)),
+                ),
+                Expanded(
+                  child: Text("وقت الحجز", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 11)),
+                ),
+              ],
+            ),
+            const Divider(),
+            ...orders.map((o) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        "#${o['order_id'] ?? '-'}",
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade800,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        o['customer_name']?.toString() ?? '-',
+                        style: GoogleFonts.cairo(fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        o['driver_name']?.toString() ?? '—',
+                        style: GoogleFonts.cairo(fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        o['booked_at']?.toString() ?? '-',
+                        style: GoogleFonts.cairo(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // قسم سفلي: حسابات المطاعم (ديون المحلات)
+  Widget _buildMarketsDebts() {
+    if (debts == null || debts!['data'] == null) return const SizedBox();
+    List markets = debts!['data'];
+    double total = _toDouble(debts!['total_debts']);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "حسابات المطاعم",
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+              Text(
+                "الإجمالي: ${total.toStringAsFixed(0)} دج",
+                style: GoogleFonts.cairo(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Colors.red.shade700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (markets.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: Text(
+                  "لا توجد ديون حالياً",
+                  style: GoogleFonts.cairo(fontSize: 13, color: Colors.grey),
+                ),
+              ),
+            )
+          else
+            ...markets.map((m) {
+              double d = _toDouble(m['debt']);
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    const CircleAvatar(
+                      radius: 14,
+                      backgroundColor: Color(0xFFFFF3E0),
+                      child: Icon(Icons.store, size: 16, color: Colors.orange),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        m['name']?.toString() ?? '-',
+                        style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      "${d.toStringAsFixed(2)} دج",
+                      style: GoogleFonts.cairo(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+        ],
+      ),
+    );
+  }
 }
