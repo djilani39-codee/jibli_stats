@@ -25,6 +25,9 @@ class JibliDashboard extends StatefulWidget {
 class _JibliDashboardState extends State<JibliDashboard> {
   Map<String, dynamic>? data;
   Map<String, dynamic>? debts; // حسابات المطاعم (ديون المحلات)
+  Map<int, int> debtsByUser = {}; // إجمالي الدين غير المسدد لكل موزع
+  List debtEntries = []; // كل الديون غير المسددة
+  int grandDebt = 0;
   String selectedPeriod = 'today';
   bool isLoading = true;
 
@@ -72,11 +75,46 @@ class _JibliDashboardState extends State<JibliDashboard> {
     }
   }
 
+  // ===== جلب ديون الموزعين (دفتر الديون) =====
+  static const String _chargeSecret = 'JibliStats#2026\$Charge';
+  static const String _chargeUrl = 'https://foodwood.site/jibli/public/credit_charge.php';
+
+  Future<void> fetchDriverDebts() async {
+    try {
+      final res = await http.post(
+        Uri.parse(_chargeUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-App-Key': _chargeSecret,
+        },
+        body: json.encode({'action': 'list'}),
+      );
+      if (res.statusCode == 200) {
+        final body = json.decode(res.body);
+        if (body['success'] == true) {
+          final totals = <int, int>{};
+          for (var t in (body['totals'] ?? [])) {
+            final uid = int.tryParse('${t['user_id']}') ?? 0;
+            totals[uid] = int.tryParse('${t['total']}') ?? 0;
+          }
+          setState(() {
+            debtsByUser = totals;
+            debtEntries = body['entries'] ?? [];
+            grandDebt = int.tryParse('${body['grand_total']}') ?? 0;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Driver Debts Error: $e");
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     fetchData('today');
     fetchDebts();
+    fetchDriverDebts();
   }
 
   @override
@@ -743,6 +781,23 @@ class _JibliDashboardState extends State<JibliDashboard> {
                   ),
                 ),
               ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      Text("إجمالي الديون", style: GoogleFonts.cairo(fontSize: 11, color: Colors.grey.shade700)),
+                      const SizedBox(height: 4),
+                      Text("$grandDebt", style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -787,11 +842,38 @@ class _JibliDashboardState extends State<JibliDashboard> {
                   children: [
                     Expanded(
                       flex: 3,
-                      child: Text(
-                        "${u['name'] ?? '-'}",
-                        style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              "${u['name'] ?? '-'}",
+                              style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          InkWell(
+                            onTap: () => _showChargeDialog(u),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(Icons.add_card, size: 18, color: Colors.green.shade700),
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () => _showDebtsDialog(u),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(
+                                Icons.receipt_long,
+                                size: 18,
+                                color: (debtsByUser[int.tryParse('${u['id']}') ?? 0] ?? 0) > 0
+                                    ? Colors.red.shade600
+                                    : Colors.grey.shade400,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Expanded(
@@ -1074,6 +1156,401 @@ class _JibliDashboardState extends State<JibliDashboard> {
     } catch (e) {
       debugPrint("Market PDF Export Error: $e");
     }
+  }
+
+  // ===== شحن رصيد (فلكسي) الموزع =====
+  Future<void> _chargeCredit(int userId, int amount) async {
+    try {
+      final res = await http.post(
+        Uri.parse(_chargeUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-App-Key': _chargeSecret,
+        },
+        body: json.encode({'user_id': userId, 'amount': amount}),
+      );
+      final body = json.decode(res.body);
+      if (res.statusCode == 200 && body['success'] == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.green.shade700,
+              content: Text(
+                "تم شحن ${body['name']} بـ $amount دج — الرصيد الجديد: ${body['new']} دج — الدين: ${body['total_debt'] ?? amount} دج",
+                style: GoogleFonts.cairo(fontSize: 13),
+              ),
+            ),
+          );
+        }
+        await fetchDebts();
+        await fetchDriverDebts();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.red.shade700,
+              content: Text(
+                "فشل الشحن: ${body['message'] ?? res.statusCode}",
+                style: GoogleFonts.cairo(fontSize: 13),
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("Charge Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red.shade700,
+            content: Text("خطأ في الاتصال: $e", style: GoogleFonts.cairo(fontSize: 13)),
+          ),
+        );
+      }
+    }
+  }
+
+  // ===== دفتر ديون الموزع =====
+  Future<void> _payDebt(int userId, int debtId) async {
+    try {
+      final res = await http.post(
+        Uri.parse(_chargeUrl),
+        headers: {'Content-Type': 'application/json', 'X-App-Key': _chargeSecret},
+        body: json.encode({'action': 'pay', 'user_id': userId, 'debt_id': debtId}),
+      );
+      final body = json.decode(res.body);
+      if (res.statusCode == 200 && body['success'] == true) {
+        await fetchDriverDebts();
+        if (mounted) _toast(body['message'] ?? 'تم التسديد', Colors.green.shade700);
+      } else {
+        if (mounted) _toast('فشل: ${body['message'] ?? res.statusCode}', Colors.red.shade700);
+      }
+    } catch (e) {
+      debugPrint("Pay Debt Error: $e");
+    }
+  }
+
+  Future<void> _payAllDebts(int userId) async {
+    try {
+      final res = await http.post(
+        Uri.parse(_chargeUrl),
+        headers: {'Content-Type': 'application/json', 'X-App-Key': _chargeSecret},
+        body: json.encode({'action': 'pay', 'user_id': userId, 'all': 1}),
+      );
+      final body = json.decode(res.body);
+      if (res.statusCode == 200 && body['success'] == true) {
+        await fetchDriverDebts();
+        if (mounted) _toast(body['message'] ?? 'تم تسديد الكل', Colors.green.shade700);
+      } else {
+        if (mounted) _toast('فشل: ${body['message'] ?? res.statusCode}', Colors.red.shade700);
+      }
+    } catch (e) {
+      debugPrint("PayAll Debt Error: $e");
+    }
+  }
+
+  Future<void> _addManualDebt(int userId, int amount, String note) async {
+    try {
+      final res = await http.post(
+        Uri.parse(_chargeUrl),
+        headers: {'Content-Type': 'application/json', 'X-App-Key': _chargeSecret},
+        body: json.encode({'action': 'add_debt', 'user_id': userId, 'amount': amount, 'note': note}),
+      );
+      final body = json.decode(res.body);
+      if (res.statusCode == 200 && body['success'] == true) {
+        await fetchDriverDebts();
+        if (mounted) _toast(body['message'] ?? 'تم تسجيل الدين', Colors.green.shade700);
+      } else {
+        if (mounted) _toast('فشل: ${body['message'] ?? res.statusCode}', Colors.red.shade700);
+      }
+    } catch (e) {
+      debugPrint("Add Debt Error: $e");
+    }
+  }
+
+  void _toast(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: color,
+        content: Text(msg, style: GoogleFonts.cairo(fontSize: 13)),
+      ),
+    );
+  }
+
+  Future<void> _showDebtsDialog(Map u) async {
+    final int userId = (u['id'] is int) ? u['id'] : int.tryParse('${u['id']}') ?? 0;
+    final name = u['name']?.toString() ?? '-';
+    final amountController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final myEntries = debtEntries
+                .where((e) => (int.tryParse('${e['user_id']}') ?? 0) == userId)
+                .toList();
+            final total = debtsByUser[userId] ?? 0;
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              title: Text("ديون $name", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16)),
+              content: SizedBox(
+                width: 340,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: total > 0 ? Colors.red.shade50 : Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          total > 0 ? "إجمالي الدين: $total دج" : "لا دين عليه ✅",
+                          style: GoogleFonts.cairo(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: total > 0 ? Colors.red.shade800 : Colors.green.shade800,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      if (myEntries.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text("لا توجد ديون مسجلة", style: GoogleFonts.cairo(fontSize: 12, color: Colors.grey)),
+                        )
+                      else ...[
+                        ...myEntries.map((e) {
+                          final id = int.tryParse('${e['id']}') ?? 0;
+                          final amt = int.tryParse('${e['amount']}') ?? 0;
+                          final note = (e['note'] ?? '').toString();
+                          final date = (e['date'] ?? '').toString();
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text("$amt دج", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red.shade700)),
+                                      Text("$note — $date", style: GoogleFonts.cairo(fontSize: 10, color: Colors.grey.shade600)),
+                                    ],
+                                  ),
+                                ),
+                                TextButton(
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                                    foregroundColor: Colors.green.shade700,
+                                  ),
+                                  onPressed: () async {
+                                    await _payDebt(userId, id);
+                                    setDialogState(() {});
+                                  },
+                                  child: Text("تسديد", style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        if (total > 0)
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green.shade700,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () async {
+                                await _payAllDebts(userId);
+                                setDialogState(() {});
+                              },
+                              icon: const Icon(Icons.done_all, size: 18),
+                              label: Text("تسديد الكل ($total دج)", style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                      ],
+                      const Divider(height: 24),
+                      Text("إضافة دين يدوي (مبلغ أقرضته له)", style: GoogleFonts.cairo(fontSize: 12, color: Colors.grey.shade700)),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: amountController,
+                              keyboardType: TextInputType.number,
+                              style: GoogleFonts.cairo(fontSize: 13),
+                              decoration: InputDecoration(
+                                labelText: "المبلغ (دج)",
+                                labelStyle: GoogleFonts.cairo(fontSize: 11),
+                                isDense: true,
+                                border: const OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange.shade800,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () async {
+                              final amt = int.tryParse(amountController.text.trim()) ?? 0;
+                              if (amt <= 0) return;
+                              amountController.clear();
+                              await _addManualDebt(userId, amt, 'دين يدوي');
+                              setDialogState(() {});
+                            },
+                            child: Text("إضافة", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text("إغلاق", style: GoogleFonts.cairo(color: Colors.grey)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showChargeDialog(Map u) async {
+    final int userId = (u['id'] is int) ? u['id'] : int.tryParse('${u['id']}') ?? 0;
+    final int current = (u['credit'] is int) ? u['credit'] : int.tryParse('${u['credit']}') ?? 0;
+    final name = u['name']?.toString() ?? '-';
+    final controller = TextEditingController(text: '2000');
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            void quick(int v) {
+              controller.text = '$v';
+              setDialogState(() {});
+            }
+
+            final amount = int.tryParse(controller.text.trim()) ?? 0;
+            final newBalance = current + amount;
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              title: Text("شحن فلكسي", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 17)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 4),
+                  Text("الرصيد الحالي: $current دج",
+                      style: GoogleFonts.cairo(fontSize: 12, color: Colors.grey.shade700)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      for (final v in [2000, 4000])
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: OutlinedButton(
+                            onPressed: () => quick(v),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              side: BorderSide(
+                                color: amount == v ? Colors.green.shade700 : Colors.grey.shade300,
+                                width: amount == v ? 2 : 1,
+                              ),
+                            ),
+                            child: Text("+$v", style: GoogleFonts.cairo(fontSize: 12)),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    onChanged: (_) => setDialogState(() {}),
+                    decoration: InputDecoration(
+                      labelText: "المبلغ (دج)",
+                      labelStyle: GoogleFonts.cairo(fontSize: 12),
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                    ),
+                    style: GoogleFonts.cairo(fontSize: 14),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          "الرصيد بعد الشحن: $newBalance دج",
+                          style: GoogleFonts.cairo(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade900,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "+ $amount دج سيُسجَّل كدين عليه",
+                          style: GoogleFonts.cairo(fontSize: 11, color: Colors.red.shade700),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text("إلغاء", style: GoogleFonts.cairo(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade700,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: amount <= 0
+                      ? null
+                      : () async {
+                          Navigator.pop(ctx);
+                          await _chargeCredit(userId, amount);
+                        },
+                  child: Text("تأكيد الشحن", style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   // جلب صفوف جدول الفلكسي للتصدير
