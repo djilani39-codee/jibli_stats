@@ -43,18 +43,24 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
 
-if (!Schema::hasTable('driver_debts')) {
-    Schema::create('driver_debts', function (Blueprint $table) {
-        $table->increments('id');
-        $table->unsignedInteger('user_id');
-        $table->integer('amount');
-        $table->string('note', 191)->nullable();
-        $table->tinyInteger('status')->default(0); // 0 = unpaid, 1 = paid
-        $table->timestamp('created_at')->nullable();
-        $table->timestamp('paid_at')->nullable();
-        $table->index('user_id');
-        $table->index('status');
-    });
+try {
+    if (!Schema::hasTable('driver_debts')) {
+        Schema::create('driver_debts', function (Blueprint $table) {
+            $table->increments('id');
+            $table->unsignedInteger('user_id');
+            $table->integer('amount');
+            $table->string('note', 191)->nullable();
+            $table->tinyInteger('status')->default(0); // 0 = unpaid, 1 = paid
+            $table->timestamp('created_at')->nullable();
+            $table->timestamp('paid_at')->nullable();
+            $table->index('user_id');
+            $table->index('status');
+        });
+    }
+} catch (\Throwable $e) {
+    http_response_code(500);
+    echo json_encode(array('success' => false, 'message' => 'table_error', 'detail' => $e->getMessage()));
+    exit;
 }
 
 function isJibliDriver($userId)
