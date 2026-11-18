@@ -1190,7 +1190,7 @@ class _JibliDashboardState extends State<JibliDashboard> {
             SnackBar(
               backgroundColor: Colors.red.shade700,
               content: Text(
-                "فشل الشحن: ${body['message'] ?? res.statusCode}",
+                _errMsg(body['message']),
                 style: GoogleFonts.cairo(fontSize: 13),
               ),
             ),
@@ -1211,6 +1211,29 @@ class _JibliDashboardState extends State<JibliDashboard> {
   }
 
   // ===== دفتر ديون الموزع =====
+  String _errMsg(dynamic code) {
+    switch ('$code') {
+      case 'forbidden':
+        return 'غير مصرح';
+      case 'missing_user':
+        return 'الموزع غير محدد';
+      case 'not_found':
+        return 'الموزع غير موجود';
+      case 'not_driver':
+        return 'هذا المستخدم ليس موزعاً';
+      case 'bad_amount':
+        return 'المبلغ غير صالح';
+      case 'missing_debt_id':
+        return 'الدين غير محدد';
+      case 'debt_not_found':
+        return 'الدين غير موجود';
+      case 'server_error':
+        return 'خطأ في السيرفر';
+      default:
+        return 'فشل: $code';
+    }
+  }
+
   Future<void> _payDebt(int userId, int debtId) async {
     try {
       final res = await http.post(
@@ -1221,9 +1244,9 @@ class _JibliDashboardState extends State<JibliDashboard> {
       final body = json.decode(res.body);
       if (res.statusCode == 200 && body['success'] == true) {
         await fetchDriverDebts();
-        if (mounted) _toast(body['message'] ?? 'تم التسديد', Colors.green.shade700);
+        if (mounted) _toast('تم تسديد ${body['amount'] ?? ''} دج', Colors.green.shade700);
       } else {
-        if (mounted) _toast('فشل: ${body['message'] ?? res.statusCode}', Colors.red.shade700);
+        if (mounted) _toast(_errMsg(body['message']), Colors.red.shade700);
       }
     } catch (e) {
       debugPrint("Pay Debt Error: $e");
@@ -1240,9 +1263,9 @@ class _JibliDashboardState extends State<JibliDashboard> {
       final body = json.decode(res.body);
       if (res.statusCode == 200 && body['success'] == true) {
         await fetchDriverDebts();
-        if (mounted) _toast(body['message'] ?? 'تم تسديد الكل', Colors.green.shade700);
+        if (mounted) _toast('تم تسديد كل ديون ${body['name'] ?? ''} ✅', Colors.green.shade700);
       } else {
-        if (mounted) _toast('فشل: ${body['message'] ?? res.statusCode}', Colors.red.shade700);
+        if (mounted) _toast(_errMsg(body['message']), Colors.red.shade700);
       }
     } catch (e) {
       debugPrint("PayAll Debt Error: $e");
@@ -1259,9 +1282,9 @@ class _JibliDashboardState extends State<JibliDashboard> {
       final body = json.decode(res.body);
       if (res.statusCode == 200 && body['success'] == true) {
         await fetchDriverDebts();
-        if (mounted) _toast(body['message'] ?? 'تم تسجيل الدين', Colors.green.shade700);
+        if (mounted) _toast('تم تسجيل دين ${body['amount'] ?? amount} دج — إجمالي الدين: ${body['total_debt'] ?? ''}', Colors.green.shade700);
       } else {
-        if (mounted) _toast('فشل: ${body['message'] ?? res.statusCode}', Colors.red.shade700);
+        if (mounted) _toast(_errMsg(body['message']), Colors.red.shade700);
       }
     } catch (e) {
       debugPrint("Add Debt Error: $e");
